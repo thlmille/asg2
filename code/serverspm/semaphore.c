@@ -14,7 +14,7 @@ typedef struct sem{
   int proc[1000];
 }sem;
 
-PRIVATE sem* sem_array[101];
+PRIVATE sem** sem_array[101];
 //memset(&sem_array,NULL,100*sizeof(sem));
 
 PUBLIC int do_seminit(){
@@ -36,7 +36,7 @@ PUBLIC int do_seminit(){
     }
   }
   if (sem_array[sema] == NULL){
-    sem *a;
+    sem *a = malloc (sizeof (struct sem))
     a->id = sema;
     a->val = value;
     memset(&a->proc,0,100*sizeof(int));
