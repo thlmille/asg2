@@ -14,7 +14,7 @@ typedef struct sem{
   int proc[1000];
 }sem;
 
-PRIVATE sem** sem_array[101];
+PRIVATE sem* sem_array[101];
 //memset(&sem_array,NULL,100*sizeof(sem));
 
 PUBLIC int do_seminit(){
@@ -28,19 +28,19 @@ PUBLIC int do_seminit(){
     int i;
     for(i=1;i<101;i++){
       if (sem_array[i] == NULL){
-        sema = i;
-      } 
+	sema = i;
+      }
     }
     if (sema == 0){
       return EAGAIN;
     }
   }
   if (sem_array[sema] == NULL){
-    sem *a = malloc (sizeof (struct sem))
-    a->id = sema;
+    sem *a = malloc (sizeof (struct sem*))
+      a->id = sema;
     a->val = value;
     memset(&a->proc,0,100*sizeof(int));
-    memcpy(sem_array[sema],&a,sizeof(sem));
+    memcpy(sem_array[sema],&a,sizeof(sem*));
   } else {
     printf("value already exists\n");
     return EEXIST;
@@ -72,7 +72,7 @@ PUBLIC int do_semup(){
   }
   if (sem_array[sem]->val <= 0){
     int process = sem_array[sem]->proc[0];
-    mp[process].mp_flags = REPLY;
+    mp[process].mp_flags |= REPLY;
     memcpy(&sem_array,&sem_array+1,99*sizeof(int));
 
     //do_(); //this is where we wake up waiting proc
@@ -92,12 +92,12 @@ PUBLIC int do_semdown(){
     return 1;
   }
   if (sem_array[sem]->val < 0){
-    mp->mp_flags = PAUSE;
+    mp->mp_flags |= PAUSE;
     int i = 0;
     while(i<100){
       if (sem_array[sem]->proc[i] == 0){
-        sem_array[sem]->proc[i] = mp->mp_pid;
-        i = 101;
+	sem_array[sem]->proc[i] = mp->mp_pid;
+	i = 101;
       }
     }
   }
