@@ -1,0 +1,9 @@
+/usr/src/servers/pm
+/usr/src/lib/libc/sys-minix
+
+/usr/src/
+- make libraries
+
+/usr/src/tools
+- make hdboot
+-make install

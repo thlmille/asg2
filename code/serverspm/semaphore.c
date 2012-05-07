@@ -36,8 +36,8 @@ PUBLIC int do_seminit(){
     }
   }
   if (sem_array[sema] == NULL){
-    sem *a = malloc (sizeof (struct sem*))
-      a->id = sema;
+    sem *a = malloc (sizeof (struct sem*));
+    a->id = sema;
     a->val = value;
     memset(&a->proc,0,100*sizeof(int));
     memcpy(sem_array[sema],&a,sizeof(sem*));
