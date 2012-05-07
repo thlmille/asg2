@@ -14,13 +14,50 @@ typedef struct sem{
   int proc[1000];
 }sem;
 
-PRIVATE sem **sem_array;
+PRIVATE semtable_ref main_table;
+PRIVATE int used_nums[2001];
 PRIVATE int first_flag;
 
+/* Get a string from a num so I can reuse the hashing function
+   from the stringtable I made for cmps104, put an 'a' in front
+   of negative numbers to account for negative ids */
+PRIVATE char *strnum (int num) {
+  int hold = num;
+  int size = 0;
+  while (hold != 0) {
+    size++;
+    hold = hold / 10;
+  }
+  int extra_slots = 1; /* 1 for positive number (null plug) */
+  if (num < 0) extra_slots = 2; /* add room for 'a' at beginning of */
+                                   /* negative numbers */
+  char *digits = calloc (size+extra_slots, sizeof (char));
+  char *itor = digits + size - 1;
+  int curr_dig;
+  while (num != 0) {
+    curr_dig = num % 10;
+    *itor = (char) (curr_dig + 48);
+    itor--;
+    num = num / 10;
+  }
+  /* add a at beginning slot if number is negative */
+  if (num < 0) {
+    itor--;
+    *itor = 'a';
+  }
+  return digits;
+}
+
+/* Function to initialize arrays if seminit is being called for the */
+/* first time */
 PRIVATE void check_first () {
   if (first_flag != 1) {
     first_flag = 1;
-    sem_array = calloc (101, sizeof(sem *));
+    sem_table = new_semtable ();
+    int i;
+    for (i = 0; i < 2001; ++i) {
+      used_nums[i] = 1;
+    }
   }
   return;
 }
@@ -44,18 +81,28 @@ PUBLIC int do_seminit(){
   }
 
   /* Assign new semaphore slot in the array */
+
+  /* First case where user does not give an id number */
   if (in_id == 0){
+    /* Find first open number */
     int i;
-    for(i = 1; i<101; i++){
-      if (sem_array[i] == NULL){
-	in_id = i;
-      }
+    for (i = 1; i < 2001; ++i) {
+      if (used_nums[i]) break;
     }
-    /* If no slot in the array is found, return eagain */
-    if (in_id == 0){
-      return EAGAIN;
-    }
+
+    /* Return error if all numbers are used */
+    if (i == 2001) return EAGAIN;
+
+    /* Initialize new semaphore and put into hashtable */
+    int id_num = i - 1000;
+    sem *new_sem = malloc (sizeof (struct sem*));
+    new_sem->id = id_num;
+    new_sem->val = value; 
+    intern_semtable (main_table, strnum(new_sem->id), new_sem);
   }
+
+  /*  Second case where user provides an id number */
+
 
   /* Initialize new semaphore */
   if (sem_array[in_id] == NULL){
