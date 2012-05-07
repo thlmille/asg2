@@ -4,12 +4,12 @@
 #include <lib.h>
 #include <stdio.h>
 #include <stdlib.h>
+//#include <string.h>
 
 #include "param.h"
 #include "mproc.h"
 #include "semtable.h"
 
-#include <string.h>
 
 struct sem{
   int id;
@@ -19,7 +19,6 @@ struct sem{
 
 PRIVATE semtable_ref main_table;
 PRIVATE int first_flag;
-
 
 /* Get a string from a num so I can reuse the hashing function
    from the stringtable I made for cmps104 */
@@ -66,6 +65,7 @@ PUBLIC int do_seminit(){
 
   int in_id = m_in.m1_i1; //first value to pass in
   int value = m_in.m1_i2; //second value to pass in
+  int ret_id;
 
   printf("sem : %d, value: %d\n",in_id,value);
 
@@ -92,6 +92,7 @@ PUBLIC int do_seminit(){
       free (new_sem);
       ++rand_id;
     }
+    ret_id = rand_id;
   }
   /*  Second case where user provides an id number */
   else {
@@ -100,7 +101,9 @@ PUBLIC int do_seminit(){
     new_sem->val = value;
     if (!intern_semtable (main_table, strnum(in_id), new_sem))
       return EEXIST;
+    ret_id = in_id;
   }
+  return ret_id;
 }
 
 PUBLIC int do_semvalue(){

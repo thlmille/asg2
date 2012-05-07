@@ -4,11 +4,44 @@
 //#if !defined(_STRINGTABLE_H_INCLUDE_)
 //#define _STRINGTABLE_H_INCLUDE_
 
-#include <string.h>
+//#include <string.h>
 #include <stdlib.h>
 #include <assert.h>
 #include <stdio.h>
 #include <inttypes.h>
+
+
+/* No, that's cool, I'll just write my own string library */
+int strlen (char *str) {
+  int length = 0;
+  char *itor = str;
+  while (*itor != '\0') {
+    ++length;
+    ++itor;
+  }
+  return length;
+}
+
+char *strdup (char *str) {
+  char *copy = calloc (strlen(str) + 1, sizeof(char));
+  int i;
+  for (i = 0; i < strlen(str); ++i) {
+    copy[i] = str[i];
+  }
+  return copy;
+}
+
+/* This version just returns 0 if the strings are equal */
+int strcmp (char *str1, char *str2) {
+  int i = 0;
+  while (str1[i] != '\0' && str2[i] != '\0') {
+    if (str1[i] != str2[i]) return 1;
+    ++i;
+  }
+  if (str1[i] == str2[i]) return 0;
+  return 1;
+}
+
 
 typedef struct sem sem;
 
