@@ -14,38 +14,62 @@ typedef struct sem{
   int proc[1000];
 }sem;
 
-PRIVATE sem* sem_array[101];
+PRIVATE sem **sem_array;
+PRIVATE int first_flag;
+
+PRIVATE void check_first () {
+  if (first_flag != 1) {
+    first_flag = 1;
+    sem_array = calloc (101, sizeof(sem *));
+  }
+  return;
+}
+
 //memset(&sem_array,NULL,100*sizeof(sem));
 
+
 PUBLIC int do_seminit(){
-  int sema=m_in.m1_i1; //first value to pass in
+  /* Call check_first to see if we need to initialize */
+  /*    semaphore array */
+  check_first ();
+
+  int in_id = m_in.m1_i1; //first value to pass in
   int value = m_in.m1_i2; //second value to pass in
-  printf("sem : %d, value: %d\n",sema,value);
-  if (sema > 1000 || sema < 0){
+
+  printf("sem : %d, value: %d\n",in_id,value);
+
+  /* Check if passed in id number is within range */
+  if (in_id > 1000 || in_id < -1000){
     return EINVAL;
   }
-  if (sema == 0){
+
+  /* Assign new semaphore slot in the array */
+  if (in_id == 0){
     int i;
-    for(i=1;i<101;i++){
+    for(i = 1; i<101; i++){
       if (sem_array[i] == NULL){
-	sema = i;
+	in_id = i;
       }
     }
-    if (sema == 0){
+    /* If no slot in the array is found, return eagain */
+    if (in_id == 0){
       return EAGAIN;
     }
   }
-  if (sem_array[sema] == NULL){
+
+  /* Initialize new semaphore */
+  if (sem_array[in_id] == NULL){
     sem *a = malloc (sizeof (struct sem*));
-    a->id = sema;
+    a->id = in_id;
     a->val = value;
     memset(&a->proc,0,100*sizeof(int));
-    memcpy(sem_array[sema],&a,sizeof(sem*));
-  } else {
+    memcpy(sem_array[in_id],&a,sizeof(sem*));
+  } 
+  /* Return eexist if slot is already used */
+  else {
     printf("value already exists\n");
     return EEXIST;
   }
-
   return 0;
 }
 
