@@ -2,25 +2,27 @@
 #include <sys/queue.h>
 #include <errno.h>
 #include <lib.h>
-#include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+
 #include "param.h"
 #include "mproc.h"
+#include "semtable.h"
 
-typedef struct sem{
+#include <string.h>
+
+struct sem{
   int id;
   int val;
   int proc[1000];
-}sem;
+};
 
 PRIVATE semtable_ref main_table;
-PRIVATE int used_nums[2001];
 PRIVATE int first_flag;
 
+
 /* Get a string from a num so I can reuse the hashing function
-   from the stringtable I made for cmps104, put an 'a' in front
-   of negative numbers to account for negative ids */
+   from the stringtable I made for cmps104 */
 PRIVATE char *strnum (int num) {
   int hold = num;
   int size = 0;
@@ -28,10 +30,7 @@ PRIVATE char *strnum (int num) {
     size++;
     hold = hold / 10;
   }
-  int extra_slots = 1; /* 1 for positive number (null plug) */
-  if (num < 0) extra_slots = 2; /* add room for 'a' at beginning of */
-                                   /* negative numbers */
-  char *digits = calloc (size+extra_slots, sizeof (char));
+  char *digits = calloc (size+1, sizeof (char));
   char *itor = digits + size - 1;
   int curr_dig;
   while (num != 0) {
@@ -40,12 +39,11 @@ PRIVATE char *strnum (int num) {
     itor--;
     num = num / 10;
   }
-  /* add a at beginning slot if number is negative */
-  if (num < 0) {
-    itor--;
-    *itor = 'a';
-  }
   return digits;
+}
+
+PRIVATE sem *fetch_sem (int id_num) {
+  return get_sem (main_table, strnum (id_num));
 }
 
 /* Function to initialize arrays if seminit is being called for the */
@@ -53,11 +51,7 @@ PRIVATE char *strnum (int num) {
 PRIVATE void check_first () {
   if (first_flag != 1) {
     first_flag = 1;
-    sem_table = new_semtable ();
-    int i;
-    for (i = 0; i < 2001; ++i) {
-      used_nums[i] = 1;
-    }
+    main_table = new_semtable ();
   }
   return;
 }
@@ -75,8 +69,8 @@ PUBLIC int do_seminit(){
 
   printf("sem : %d, value: %d\n",in_id,value);
 
-  /* Check if passed in id number is within range */
-  if (in_id > 1000 || in_id < -1000){
+  /* Check if passed in values are acceptable */
+  if (value > 1000 || value < -1000 || in_id < 0){
     return EINVAL;
   }
 
@@ -84,68 +78,59 @@ PUBLIC int do_seminit(){
 
   /* First case where user does not give an id number */
   if (in_id == 0){
-    /* Find first open number */
-    int i;
-    for (i = 1; i < 2001; ++i) {
-      if (used_nums[i]) break;
+    /* Try intern_stringtable with different random values until */
+    /*       we find an empty slot */
+    int rand_id = 1; // Not actually random
+    for (;;) {
+      /* The loading factor of the table is .45, so the likely-hood */
+      /*    of this loop repeating more than a few times is slim */
+      sem *new_sem = malloc (sizeof(sem));
+      new_sem->id = rand_id;
+      new_sem->val = value;
+      if (intern_semtable (main_table, strnum(rand_id), new_sem))
+	break;
+      free (new_sem);
+      ++rand_id;
     }
-
-    /* Return error if all numbers are used */
-    if (i == 2001) return EAGAIN;
-
-    /* Initialize new semaphore and put into hashtable */
-    int id_num = i - 1000;
-    sem *new_sem = malloc (sizeof (struct sem*));
-    new_sem->id = id_num;
-    new_sem->val = value; 
-    intern_semtable (main_table, strnum(new_sem->id), new_sem);
   }
-
   /*  Second case where user provides an id number */
-
-
-  /* Initialize new semaphore */
-  if (sem_array[in_id] == NULL){
-    sem *a = malloc (sizeof (struct sem*));
-    a->id = in_id;
-    a->val = value;
-    memset(&a->proc,0,100*sizeof(int));
-    memcpy(sem_array[in_id],&a,sizeof(sem*));
-  } 
-  /* Return eexist if slot is already used */
   else {
-    printf("value already exists\n");
-    return EEXIST;
+    sem *new_sem = malloc (sizeof(sem));
+    new_sem->id = in_id;
+    new_sem->val = value;
+    if (!intern_semtable (main_table, strnum(in_id), new_sem))
+      return EEXIST;
   }
-  return 0;
 }
 
 PUBLIC int do_semvalue(){
-  int sem=m_in.m1_i1;
-  printf("sem: %d\n",sem);
-  if (sem_array[sem] == NULL){
+  int id_num = m_in.m1_i1;
+  sem *the_sem = fetch_sem (id_num);
+  if (the_sem == NULL){
     return 0x8000000;
   } else {
-    printf("returning : %d\n" ,sem_array[sem]->val);
-    return sem_array[sem]->val;
+    printf("returning : %d\n" ,the_sem->val);
+    return the_sem->val;
   }
 }
 
 PUBLIC int do_semup(){
-  int sem=m_in.m1_i1;
-  if (sem_array[sem] != NULL){
-    sem_array[sem]->val += 1;
-    if (sem_array[sem]->val > 1000){
+  int id_num = m_in.m1_i1;
+  sem *the_sem = fetch_sem (id_num);
+  if (the_sem != NULL){
+    the_sem->val += 1;
+    if (the_sem->val > 1000){
       return EOVERFLOW;
     }
   } else {
     return 1;
   }
-  if (sem_array[sem]->val <= 0){
-    int process = sem_array[sem]->proc[0];
+  if (the_sem->val <= 0){
+    int process = the_sem->proc[0];
     mp[process].mp_flags |= REPLY;
-    memcpy(&sem_array,&sem_array+1,99*sizeof(int));
 
+    // Commented out cause I dont know what this shit does
+    //memcpy(&sem_array,&sem_array+1,99*sizeof(int));
     //do_(); //this is where we wake up waiting proc
   }
   //printf("sem: %d\n",sem);
@@ -153,21 +138,22 @@ PUBLIC int do_semup(){
 }
 
 PUBLIC int do_semdown(){
-  int sem=m_in.m1_i1;
-  if (sem_array[sem] != NULL){
-    sem_array[sem]->val -= 1;
-    if (sem_array[sem]->val < 1000){
+  int id_num = m_in.m1_i1;
+  sem *the_sem = fetch_sem(id_num);
+  if (the_sem != NULL){
+    the_sem->val -= 1;
+    if (the_sem->val < 1000){
       return EOVERFLOW;
     }
   } else {
     return 1;
   }
-  if (sem_array[sem]->val < 0){
+  if (the_sem->val < 0){
     mp->mp_flags |= PAUSE;
     int i = 0;
     while(i<100){
-      if (sem_array[sem]->proc[i] == 0){
-	sem_array[sem]->proc[i] = mp->mp_pid;
+      if (the_sem->proc[i] == 0){
+	the_sem->proc[i] = mp->mp_pid;
 	i = 101;
       }
     }
@@ -176,14 +162,12 @@ PUBLIC int do_semdown(){
 }
 
 PUBLIC int do_semfree(){
-  int sem=m_in.m1_i1;
-  if (sem_array[sem] != NULL){
-    while (sem_array[sem]->val < 0){
-      do_semup(sem);
-    }
-    free(sem_array[sem]);
-    sem_array[sem] = NULL;
+  int id_num = m_in.m1_i1;
+  sem *the_sem = fetch_sem(id_num);
+  if (the_sem == NULL) return 0;
+  while (the_sem->val < 0) {
+    do_semup (id_num);
   }
-  printf("sem: %d\n",sem);
-  return 0;
+  delete_node (main_table, strnum(id_num));
+  return 1;
 }
