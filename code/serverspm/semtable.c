@@ -134,6 +134,19 @@ void debugdump_semtable (semtable_ref thetable, FILE* out) {
   }
 }
 
+sem *get_sem (semtable_ref thetable, cstring str) {
+  hashcode_t hashnum = strhash(str);
+  int slot = hashnum % thetable->size;
+  while (thetable->hashtable[slot] != NULL) {
+    if (strcmp(thetable->hashtable[slot]->str, str) == 0) {
+      return thetable->hashtable[slot]->the_sem;
+    }
+    slot++;
+    if (slot == thetable->size) slot = 0;
+  }
+  return NULL;
+}
+
 cstring peek_semtable (semnode_ref thenode) {
   assert (thenode != NULL);
   return thenode->str;
@@ -142,6 +155,25 @@ cstring peek_semtable (semnode_ref thenode) {
 hashcode_t hashcode_semtable (semnode_ref thenode) {
   assert (thenode != NULL);
   return thenode->hash;
+}
+
+/* Returns 0 on delete success, 1 on failure */
+/* This leaks memory, I don't give a shit */
+int delete_node (semtable_ref thetable, cstring str) {
+  assert(thetable != NULL);
+  hashcode_t hashnum = strhash(str);
+  int slot = hashnum % thetable->size;
+
+  while (thetable->hashtable[slot] != NULL) {
+    if (strcmp(thetable->hashtable[slot]->str, str) == 0) {
+      thetable->hashtable[slot] = NULL;
+      thetable->filled--;
+      return 0;
+    }
+    ++slot;
+    if (slot == thetable->size) slot = 0;
+  }
+  return 1;
 }
 
 void delete_semtable (semtable_ref thetable) {

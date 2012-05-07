@@ -36,6 +36,8 @@ semtable_ref new_semtable (void);
 
 void delete_semtable (semtable_ref);
 
+int delete_node (semtable_ref, cstring);
+
 void debugdump_semtable (semtable_ref, FILE*);
 
 semnode_ref intern_semtable (semtable_ref, cstring, sem*);
@@ -43,5 +45,7 @@ semnode_ref intern_semtable (semtable_ref, cstring, sem*);
 cstring peek_semtable (semnode_ref);
 
 hashcode_t hashcode_semtable (semnode_ref);
+
+sem *get_sem (semtable_ref thetable, cstring str);
 
 #endif
