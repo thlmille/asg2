@@ -30,6 +30,7 @@ PRIVATE void debug_message (int flag, char *str) {
 }
 
 PRIVATE void initialize () {
+  debug_message(debug, "in initialize");
   int i;
   for (i = 0; i < 100; ++i) {
     sem_array[i].id = 0;
@@ -48,6 +49,7 @@ PUBLIC int do_seminit () {
     printf ("in seminit\n");
     printf ("user_id = %d\n", user_id);
     printf ("value = %d\n", value);
+    printf ("nsems = %d\n", nsems);
   }
 
   if (nsems == 99) {
@@ -74,6 +76,7 @@ PUBLIC int do_seminit () {
       if (!used_nums[i]) {
 	user_id = i;
 	used_nums[i] = 1;
+	break;
       }
     }
   }
@@ -81,7 +84,7 @@ PUBLIC int do_seminit () {
   /* Check if semaphore already exists, if not, create it */
   debug_message (debug, "checking if semaphore exists");
   int i;
-  for (i = 1; i < 100; ++i) {
+  for (i = 0; i < 100; ++i) {
     if (user_id == sem_array[i].id) {
       debug_message (debug, "semaphore already exists");
       return -1 * EEXIST;
@@ -107,7 +110,7 @@ PUBLIC int do_seminit () {
   sem_array[open].val = value;
   int j;
   for (j = 0; j < 1000; ++j) {
-    sem_array[open].proc[i] = 0;
+    sem_array[open].proc[j] = 0;
   }
 
   nsems++;
@@ -115,13 +118,46 @@ PUBLIC int do_seminit () {
 }
 
 PUBLIC int do_semup () {
+  int sem_id = m_in.m1_i1;
+  if (debug) {
+    printf("in semup\n sem_id = %d\n", sem_id);
+  }
+  /* Find the semaphore, error if it doesn't exist */
+  int i;
+  for (i = 0; i < 100; ++i) {
+    if (sem_array[i].id == sem_id) break;
+  }
+  if (i == 100) {
+    debug_message (debug, "semaphore does not exist\n");
+    return -1 * EEXIST;
+  }
+  int sem_index = i;
+  /* Make sure value is in range */
+  if (sem_array[sem_index].val > 1000) {
+    debug_message (debug, "value > 1000");
+    return EOVERFLOW;
+  }
+  /* If value is less than 0, run the first process waiting */
   return 0;
 }
 PUBLIC int do_semdown () {
   return 0;
 }
 PUBLIC int do_semvalue () {
-  return 0;
+  int sem_id = m_in.m1_i1;
+  if (debug) {
+    printf("in semvalue\n sem_id = %d\n", sem_id);
+  }
+  /* Find the semaphore, error if it doesn't exist */
+  int i;
+  for (i = 0; i < 100; ++i) {
+    if (sem_array[i].id == sem_id) break;
+  }
+  if (i == 100) {
+    debug_message (debug, "semaphore does not exist\n");
+    return -1 * EEXIST;
+  }
+  return sem_array[i].val;
 }
 
 PUBLIC int do_semfree () {
@@ -136,10 +172,15 @@ PUBLIC int do_semfree () {
   }
   if (i == 100) {
     debug_message (debug, "semaphore does not exist");
-    return 0;
+    return -1 * EEXIST;
   }
   /* Set id to zero to mark it free */
   /* placeholder for calling semup once we have that function */
   sem_array[i].id = 0;
+  nsems--;
+  if (sem_id < 101) {
+    used_nums[sem_id] = 0;
+  }
   return 1;
 }
+
