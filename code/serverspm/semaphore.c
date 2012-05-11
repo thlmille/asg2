@@ -4,173 +4,142 @@
 #include <lib.h>
 #include <stdio.h>
 #include <stdlib.h>
-//#include <string.h>
 
 #include "param.h"
 #include "mproc.h"
-#include "semtable.h"
 
 
-struct sem{
+
+typedef struct sem{
   int id;
   int val;
   int proc[1000];
-};
+} sem;
 
-PRIVATE semtable_ref main_table;
-PRIVATE int first_flag;
+PRIVATE sem sem_array[100];
+int debug = 1;
+int nsems = 0;
 
-/* Get a string from a num so I can reuse the hashing function
-   from the stringtable I made for cmps104 */
-PRIVATE char *strnum (int num) {
-  int hold = num;
-  int size = 0;
-  while (hold != 0) {
-    size++;
-    hold = hold / 10;
-  }
-  char *digits = calloc (size+1, sizeof (char));
-  char *itor = digits + size - 1;
-  int curr_dig;
-  while (num != 0) {
-    curr_dig = num % 10;
-    *itor = (char) (curr_dig + 48);
-    itor--;
-    num = num / 10;
-  }
-  return digits;
-}
+/* Array of numbers to use when we need to assign an id */
+int used_nums[101];
 
-PRIVATE sem *fetch_sem (int id_num) {
-  return get_sem (main_table, strnum (id_num));
-}
-
-/* Function to initialize arrays if seminit is being called for the */
-/* first time */
-PRIVATE void check_first () {
-  if (first_flag != 1) {
-    first_flag = 1;
-    main_table = new_semtable ();
-  }
-  return;
-}
-
-//memset(&sem_array,NULL,100*sizeof(sem));
-
-
-PUBLIC int do_seminit(){
-  /* Call check_first to see if we need to initialize */
-  /*    semaphore array */
-  check_first ();
-
-  int in_id = m_in.m1_i1; //first value to pass in
-  int value = m_in.m1_i2; //second value to pass in
-  int ret_id;
-
-  printf("sem : %d, value: %d\n",in_id,value);
-
-  /* Check if passed in values are acceptable */
-  if (value > 1000 || value < -1000 || in_id < 0){
-    return EINVAL;
-  }
-
-  /* Assign new semaphore slot in the array */
-
-  /* First case where user does not give an id number */
-  if (in_id == 0){
-    /* Try intern_stringtable with different random values until */
-    /*       we find an empty slot */
-    int rand_id = 1; // Not actually random
-    for (;;) {
-      /* The loading factor of the table is .45, so the likely-hood */
-      /*    of this loop repeating more than a few times is slim */
-      sem *new_sem = malloc (sizeof(sem));
-      new_sem->id = rand_id;
-      new_sem->val = value;
-      if (intern_semtable (main_table, strnum(rand_id), new_sem))
-	break;
-      free (new_sem);
-      ++rand_id;
-    }
-    ret_id = rand_id;
-  }
-  /*  Second case where user provides an id number */
-  else {
-    sem *new_sem = malloc (sizeof(sem));
-    new_sem->id = in_id;
-    new_sem->val = value;
-    if (!intern_semtable (main_table, strnum(in_id), new_sem))
-      return EEXIST;
-    ret_id = in_id;
-  }
-  return ret_id;
-}
-
-PUBLIC int do_semvalue(){
-  int id_num = m_in.m1_i1;
-  sem *the_sem = fetch_sem (id_num);
-  if (the_sem == NULL){
-    return 0x8000000;
-  } else {
-    printf("returning : %d\n" ,the_sem->val);
-    return the_sem->val;
+PRIVATE void debug_message (int flag, char *str) {
+  if (flag) {
+    printf ("%s\n", str);
   }
 }
 
-PUBLIC int do_semup(){
-  int id_num = m_in.m1_i1;
-  sem *the_sem = fetch_sem (id_num);
-  if (the_sem != NULL){
-    the_sem->val += 1;
-    if (the_sem->val > 1000){
-      return EOVERFLOW;
-    }
-  } else {
-    return 1;
+PRIVATE void initialize () {
+  int i;
+  for (i = 0; i < 100; ++i) {
+    sem_array[i].id = 0;
+    used_nums[i] = 0;
   }
-  if (the_sem->val <= 0){
-    int process = the_sem->proc[0];
-    mp[process].mp_flags |= REPLY;
-
-    // Commented out cause I dont know what this shit does
-    //memcpy(&sem_array,&sem_array+1,99*sizeof(int));
-    //do_(); //this is where we wake up waiting proc
-  }
-  //printf("sem: %d\n",sem);
-  return 0;
+  used_nums[i] = 0;
 }
 
-PUBLIC int do_semdown(){
-  int id_num = m_in.m1_i1;
-  sem *the_sem = fetch_sem(id_num);
-  if (the_sem != NULL){
-    the_sem->val -= 1;
-    if (the_sem->val < 1000){
-      return EOVERFLOW;
-    }
-  } else {
-    return 1;
+PUBLIC int do_seminit () {
+  int user_id = m_in.m1_i1;
+  int value = m_in.m1_i2;
+
+  if (nsems == 0) initialize();
+
+  if (debug) {
+    printf ("in seminit\n");
+    printf ("user_id = %d\n", user_id);
+    printf ("value = %d\n", value);
   }
-  if (the_sem->val < 0){
-    mp->mp_flags |= PAUSE;
-    int i = 0;
-    while(i<100){
-      if (the_sem->proc[i] == 0){
-	the_sem->proc[i] = mp->mp_pid;
-	i = 101;
+
+  if (nsems == 99) {
+    debug_message (debug, "semaphore limit exceeded");
+    return -1 * EAGAIN;
+  }
+
+  if (user_id < 0) {
+    debug_message (debug, "id less than 0");
+    return -1 * EINVAL;
+  }
+  
+  if (value > 1000 || value < -1000) {
+    debug_message (debug, "value out of range");
+    return -1 * EINVAL;
+  }
+
+  /* If given ID is 0, assign an id number */
+  if (user_id == 0) {
+    /* Find open slot in used_nums array */
+    debug_message (debug, "assigning value");
+    int i;
+    for (i = 1; i < 101; ++i) {
+      if (!used_nums[i]) {
+	user_id = i;
+	used_nums[i] = 1;
       }
     }
   }
+
+  /* Check if semaphore already exists, if not, create it */
+  debug_message (debug, "checking if semaphore exists");
+  int i;
+  for (i = 1; i < 100; ++i) {
+    if (user_id == sem_array[i].id) {
+      debug_message (debug, "semaphore already exists");
+      return -1 * EEXIST;
+    }
+  }
+  /* Update used_nums array if user_id is less than 101 */
+  if (user_id <= 100) {
+    used_nums[user_id] = 1;
+  }
+  /* Find first open slot in array and initialize that semaphore */
+  int open;
+  for (open = 0; open < 100; ++open) {
+    if (sem_array[open].id == 0) break;
+  }
+  /* This should never happen */
+  if (open == 100) {
+    debug_message (debug, "shit is fucked");
+    return -1 *EAGAIN;
+  }
+  /* Initialize semaphore */
+  debug_message (debug, "initialize semaphore");
+  sem_array[open].id = user_id;
+  sem_array[open].val = value;
+  int j;
+  for (j = 0; j < 1000; ++j) {
+    sem_array[open].proc[i] = 0;
+  }
+
+  nsems++;
+  return user_id;
+}
+
+PUBLIC int do_semup () {
+  return 0;
+}
+PUBLIC int do_semdown () {
+  return 0;
+}
+PUBLIC int do_semvalue () {
   return 0;
 }
 
-PUBLIC int do_semfree(){
-  int id_num = m_in.m1_i1;
-  sem *the_sem = fetch_sem(id_num);
-  if (the_sem == NULL) return 0;
-  while (the_sem->val < 0) {
-    do_semup (id_num);
+PUBLIC int do_semfree () {
+  int sem_id = m_in.m1_i1;
+  if (debug) {
+    printf ("in semfree\n sem_id = %d\n", sem_id);
   }
-  delete_node (main_table, strnum(id_num));
+  /* Find semaphore */
+  int i;
+  for (i = 0; i < 100; ++i) {
+    if (sem_array[i].id == sem_id) break;
+  }
+  if (i == 100) {
+    debug_message (debug, "semaphore does not exist");
+    return 0;
+  }
+  /* Set id to zero to mark it free */
+  /* placeholder for calling semup once we have that function */
+  sem_array[i].id = 0;
   return 1;
 }
