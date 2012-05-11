@@ -133,14 +133,75 @@ PUBLIC int do_semup () {
   }
   int sem_index = i;
   /* Make sure value is in range */
-  if (sem_array[sem_index].val > 1000) {
-    debug_message (debug, "value > 1000");
+  if (sem_array[sem_index].val < -1000) {
+    debug_message (debug, "value < -1000");
     return EOVERFLOW;
   }
   /* If value is less than 0, run the first process waiting */
+  if (sem_array[sem_index].val < 0) {
+    debug_message (debug, "value less than 0");
+    sem_array[sem_index].val++;
+    /* Take first process, move other processes over */
+    int process = sem_array[sem_index].proc[0];
+    int j;
+    for (j = 1; j < 1000; ++j) {
+      sem_array[sem_index].proc[j-1] = sem_array[sem_index].proc[j];
+    }
+    if (debug) {
+      printf ("waking process %d\n", process);
+    }
+    setreply (process, OK);
+  }
   return 0;
 }
 PUBLIC int do_semdown () {
+  int sem_id = m_in.m1_i1;
+  if (debug) {
+    printf("in semvalue\nsem_id = %d\n", sem_id);
+  }
+  /* Find the semaphore, error if it doesn't exist */
+  int i;
+  for (i = 0; i < 100; ++i) {
+    if (sem_array[i].id == sem_id) break;
+  }
+  if (i == 100) {
+    debug_message (debug, "semaphore does not exist\n");
+    return -1 * EEXIST;
+  }
+  int sem_index = i;
+  /* Make sure value is in range */
+  if (sem_array[sem_index].val < -1000) {
+    if (debug) {
+      printf ("value = %d\n", sem_array[sem_index].val);
+    }
+    debug_message (debug, "value < -1000");
+    return EOVERFLOW;
+  }
+  /* if value is greater than 0, decrement value */
+  if (sem_array[sem_index].val > 0) {
+    sem_array[sem_index].val--;
+  }
+  /* if value is less than 0, decrement and add process to queue */
+  else {
+    sem_array[sem_index].val--;
+    int j;
+    for (j = 0; j < 1000; ++j) {
+      if (sem_array[sem_index].proc[j] == 0) {
+	if (debug) {
+	  printf ("process %d added to queue", who_p);
+	}
+	sem_array[sem_index].proc[j] = who_p;
+	break;
+      }
+    }
+    if (debug) {
+      printf ("process list\n");
+      for (i = 0; i < 5; ++i) {
+	printf ("%d: %d\n", i, sem_array[sem_index].proc[i]);
+      }
+    }
+    return SUSPEND;
+  }
   return 0;
 }
 PUBLIC int do_semvalue () {
@@ -174,13 +235,14 @@ PUBLIC int do_semfree () {
     debug_message (debug, "semaphore does not exist");
     return -1 * EEXIST;
   }
+  /* semup until all processes are freed */
+  while (sem_array[i].val < 0) do_semup (sem_id);
   /* Set id to zero to mark it free */
-  /* placeholder for calling semup once we have that function */
   sem_array[i].id = 0;
   nsems--;
   if (sem_id < 101) {
     used_nums[sem_id] = 0;
   }
-  return 1;
+  return 0;
 }
 
