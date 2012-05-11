@@ -5,5 +5,6 @@ int main (int argc, char **argv) {
   printf ("semval = %d\n", foo);
   int bar = seminit(1,0);
   if (bar != 1) printf("bar rejected\n");
+  semfree(1);
   return 0;
 }
